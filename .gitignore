@@ -1,0 +1,12 @@
+#pycharm files
+.idea/*
+.idea/*
+
+#compiled python files
+*.pyc
+
+#config file
+masterthesis/config.py
+
+#notebook checkpoints
+notebooks/.ipynb_checkpoints/*.ipynb
