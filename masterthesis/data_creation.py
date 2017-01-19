@@ -104,6 +104,8 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
 
         numb_of_points = int(distance / (speed * sampling_rate))
 
+        new_points.append((p1_lat, p1_lon))
+
         if numb_of_points == 0:
             continue
 
