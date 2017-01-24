@@ -11,15 +11,20 @@ SEND_QUERY_ENDPOINT = config.SEND_QUERY_ENDPOINT
 APPLICATION_JSON_HEADER = {'content-type': 'application/json'}
 
 
-def upload_route(json_content):
-    request = post(
-        url=SINGLE_ROUTE_ENDPOINT,
-        data=json_content,
-        headers=APPLICATION_JSON_HEADER
-    )
+def upload_route(json_content, retries=5):
+    counter = 0
+    while counter < retries:
+        request = post(
+            url=SINGLE_ROUTE_ENDPOINT,
+            data=json_content,
+            headers=APPLICATION_JSON_HEADER
+        )
 
-    if request.content.decode('utf-8') == 'Route processed':
-        return True
+        if request.content.decode('utf-8') == 'Route processed':
+            return True
+
+        counter += 1
+
     return False
 
 
@@ -107,3 +112,21 @@ def get_spot_ids(gps_ids):
         spot_ids.append(res[0])
 
     return spot_ids
+
+
+def get_spot_position(spot_id):
+    query = """
+    MATCH (n:Spot)
+    WHERE n.spotID = '{}'
+    RETURN
+        n.latitude AS latitude,
+        n.longitude AS longitude
+    """.format(spot_id)
+
+    res = query_neo4j(query)
+
+    if len(res) == 1:
+        return res[0]
+    return {'latitude': None, 'longitude': None}
+
+

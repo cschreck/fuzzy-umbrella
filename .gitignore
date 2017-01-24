@@ -5,6 +5,9 @@
 #compiled python files
 *.pyc
 
+#egg files
+masterthesis.egg-info
+
 #config file
 masterthesis/config.py
 

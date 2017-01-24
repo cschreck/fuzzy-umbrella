@@ -7,6 +7,8 @@ from math import sin
 from .database import query_neo4j
 from gpxpy import geo
 
+import numpy as np
+
 
 def calc_heading(a, b):
     lat1, lon1, lat2, lon2 = map(radians, [a[0], a[1], b[0], b[1]])
@@ -42,3 +44,12 @@ def get_pdist_matrix(results=None):
 
         distances[i['spotID']] = distance_to_i
     return distances
+
+
+def time_to_degree(time):
+    return ((time.hour + (time.minute + (time.second/60))/60)/24) * 360
+
+
+def time_distance(t1, t2):
+    circumference = 2 * np.pi
+    return (np.abs(time_to_degree(t1) - time_to_degree(t2))) * (circumference/360)
