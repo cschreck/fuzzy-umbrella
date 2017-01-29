@@ -1,63 +1,10 @@
-from masterthesis.database import get_spot_position
-from masterthesis.database import get_start_waypoint_ids
-from masterthesis.database import get_gps_ids
-from masterthesis.database import get_end_waypoint
-from masterthesis.database import get_spot_ids
-
 from sklearn.base import BaseEstimator
 from sklearn.base import TransformerMixin
 from sklearn.cluster import DBSCAN
 
 from gpxpy import geo
 
-import pandas as pd
 import numpy as np
-
-
-def make_dataset(user_id):
-    start_waypoints = get_start_waypoint_ids(user_id)
-    start_gps_ids, dates_start = get_gps_ids(start_waypoints)
-
-    start_spot_ids = []
-    for res in get_spot_ids(start_gps_ids):
-        start_spot_ids.append(res['m']['spotID'])
-
-    start_spot_lat = list()
-    start_spot_long = list()
-    for start_spot_id in start_spot_ids:
-        res = get_spot_position(start_spot_id)
-        start_spot_lat.append(res['latitude'])
-        start_spot_long.append(res['longitude'])
-
-    end_waypoints = []
-    for start_waypoint in start_waypoints:
-        end_waypoints.append(get_end_waypoint(start_waypoint))
-
-    end_gps_ids, dates_end = get_gps_ids(end_waypoints)
-    end_spot_ids = []
-    for res in get_spot_ids(end_gps_ids):
-        if res is None:
-            end_spot_ids.append(None)
-            continue
-        end_spot_ids.append(res['m']['spotID'])
-
-    end_spot_lat = list()
-    end_spot_long = list()
-    for end_spot_id in end_spot_ids:
-        res = get_spot_position(end_spot_id)
-        end_spot_lat.append(res['latitude'])
-        end_spot_long.append(res['longitude'])
-
-    data = np.transpose([start_spot_ids, end_spot_ids, dates_start, dates_end,
-                         start_spot_lat, start_spot_long, end_spot_lat, end_spot_long])
-
-    columns = ['start_spot', 'end_spot', 'start_date', 'end_date',
-               'start_lat', 'start_lon', 'end_lat', 'end_lon']
-
-    df = pd.DataFrame(data=data, columns=columns)
-    df = df.set_index(pd.DatetimeIndex(df['start_date'])).sort_index()
-
-    return df
 
 
 class FuzzySpotTransformer(BaseEstimator, TransformerMixin):
@@ -114,3 +61,47 @@ class FuzzySpotTransformer(BaseEstimator, TransformerMixin):
 
         return spots.tolist(), dist_matrix
 
+
+class DenseDepartureTimes(BaseEstimator, TransformerMixin):
+    def __init__(self, eps=0.5):
+        self.eps = eps
+
+    def fit(self, X, y=None, **fitparams):
+        return self
+
+    def transform(self, X):
+        dbscan = DBSCAN(eps=self.eps, min_samples=1, metric='precomputed')
+        start_cluster_to_time = dict()
+        for key, group in X.groupby(['start_cluster', 'end_cluster']):
+            dist = self._calc_pdist_matrix(group)
+            clusters = dbscan.fit_predict(dist)
+            d = {timestamp: cluster for timestamp, cluster in zip(group.index, clusters)}
+            start_cluster_to_time[key] = d
+
+        start_time_cluster = list()
+        for index, row in X.iterrows():
+            cluster_pair = (row['start_cluster'], row['end_cluster'])
+            start_time_cluster.append("{}_{}".format(cluster_pair, start_cluster_to_time[cluster_pair][index]))
+
+        X['start_time_cluster'] = start_time_cluster
+        return X
+
+    def _time_to_degree(self, time):
+        return ((time.hour + (time.minute + (time.second / 60)) / 60) / 24) * 360
+
+    def _time_distance(self, t1, t2):
+        circumference = 2 * np.pi
+        return (np.abs(self._time_to_degree(t1) - self._time_to_degree(t2))) * (circumference / 360)
+
+    def _calc_pdist_matrix(self, group):
+        matrix = list()
+
+        for t1 in group.index.time:
+            inner_dist = list()
+
+            for t2 in group.index.time:
+                inner_dist.append(self._time_distance(t1, t2))
+
+            matrix.append(inner_dist)
+
+        return matrix
