@@ -63,13 +63,31 @@ class FuzzySpotTransformer(BaseEstimator, TransformerMixin):
 
 
 class DenseDepartureTimes(BaseEstimator, TransformerMixin):
-    def __init__(self, eps=0.5):
+    def __init__(self, eps=0.5, look_ahead=timedelta(hours=1)):
         self.eps = eps
+        self.look_ahead = look_ahead
 
     def fit(self, X, y=None, **fitparams):
         return self
 
     def transform(self, X):
+        rows = list()
+
+        if self.look_ahead:
+            for i in range(len(X)):
+                for j in range(i + 1, len(X)):
+                    if X['start_date'].iloc[j] - X['start_date'].iloc[i] < self.look_ahead:
+                        row_cp = X.iloc[i].copy()
+                        row_cp['end_lat'] = X['end_lat'].iloc[j]
+                        row_cp['end_lon'] = X['end_lon'].iloc[j]
+                        row_cp['end_date'] = X['end_date'].iloc[j]
+                        row_cp['end_cluster'] = X['end_cluster'].iloc[j]
+                        row_cp['start_date'] = X['start_date'].iloc[i] + timedelta(seconds=1)
+                        rows.append(row_cp)
+
+            X = X.append(rows, ignore_index=True)
+            X = X.set_index(pd.DatetimeIndex(X['start_date'])).sort_index()
+
         dbscan = DBSCAN(eps=self.eps, min_samples=1, metric='precomputed')
         start_cluster_to_time = dict()
         for key, group in X.groupby(['start_cluster', 'end_cluster']):

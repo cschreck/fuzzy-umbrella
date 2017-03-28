@@ -52,3 +52,23 @@ def make_dataset(user_id):
     df = df.set_index(pd.DatetimeIndex(df['start_date'])).sort_index()
 
     return df
+
+
+def make_dataset_geolife(trajectories):
+    rows = list()
+    for traj in trajectories:
+        row = list()
+        row.append(traj[0].lat)
+        row.append(traj[0].lon)
+        row.append(traj[0].datetime)
+        row.append(traj[-1].lat)
+        row.append(traj[-1].lon)
+        row.append(traj[-1].datetime)
+        rows.append(row)
+
+    df = pd.DataFrame(data=rows, columns=['start_lat', 'start_lon', 'start_date', 'end_lat', 'end_lon', 'end_date'])
+    df = df.set_index(pd.DatetimeIndex(df['start_date'])).sort_index()
+    return df
+
+
+
