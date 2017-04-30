@@ -1,11 +1,9 @@
-from sklearn.cluster import AgglomerativeClustering
 from sklearn.cluster import dbscan
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 from sklearn.neighbors import DistanceMetric
 
 from tpm.util.dist import haversine_distance
 from tpm.data_model import R
+from tpm.data_model import Point
 
 from collections import Counter
 
@@ -64,41 +62,41 @@ def make_df(trajs):
     return df
 
 
-def kmeans_cluster_into_spots(df, min_cluster, max_cluster):
-    start_points = list()
-    end_points = list()
-    length = len(df)
+def get_test_trajs(test, trajs):
+    test_trajs = list()
+    for i, row in test.iterrows():
+        start = row['start_date']
+        end = row['end_date']
+        for traj in trajs:
+            start_traj = None
+            end_traj = None
+            for i, p in enumerate(traj):
+                if p.datetime == start:
+                    start_traj = i
 
-    for i in range(length):
-        start_points.append([df['start_lat'].iloc[i], df['start_lon'].iloc[i]])
-        end_points.append([df['end_lat'].iloc[i], df['end_lon'].iloc[i]])
+                if p.datetime == end:
+                    end_traj = i + 1
 
-    points = np.radians(np.vstack([start_points, end_points]))
+            if start_traj is not None and end_traj is not None:
+                test_traj = traj[start_traj:end_traj]
 
-    sil_scores = list()
-    max_cluster = min(max_cluster, len(points))
-    for i in range(min_cluster, max_cluster):
-        ac = KMeans(n_clusters=i, max_iter=50)
-        pred = ac.fit_predict(points)
-        sil_score = silhouette_score(points, pred)
-        sil_scores.append(sil_score)
+        test_trajs.append(test_traj)
 
-    n_cluster = np.argmax(sil_scores) + min_cluster
-    ac = KMeans(n_clusters=n_cluster, n_jobs=-1)
-    clusters = ac.fit_predict(points)
+    return test_trajs
 
-    start_clusters = list()
-    end_clusters = list()
 
-    for i, cluster in enumerate(clusters):
-        if i < length:
-            start_clusters.append(clusters[i])
-        else:
-            end_clusters.append(clusters[i % length + length])
+def resolve_endcluster(train, p):
+    end_clusters = {Point(lat, lon, None): end for lat, lon, end in
+                    zip(train['end_lat'], train['end_lon'], train['end_cluster'])}
+    end_cluster = None
+    min_dist = 400
+    for ec_point in end_clusters:
+        dist = haversine_distance(p.lat, p.lon, ec_point.lat, ec_point.lon)
+        if dist < min_dist:
+            min_dist = dist
+            end_cluster = end_clusters[ec_point]
 
-    df['start_cluster'] = start_clusters
-    df['end_cluster'] = end_clusters
-    return df
+    return end_cluster
 
 
 def cluster_into_spots(df, init_eps=150, levels=2, threshold=0.1):
@@ -131,44 +129,6 @@ def cluster_into_spots(df, init_eps=150, levels=2, threshold=0.1):
 
     start_clusters = list()
     end_clusters = list()
-    for i, cluster in enumerate(clusters):
-        if i < length:
-            start_clusters.append(clusters[i])
-        else:
-            end_clusters.append(clusters[i % length + length])
-
-    df['start_cluster'] = start_clusters
-    df['end_cluster'] = end_clusters
-    return df
-
-
-def agglomerative_cluster_into_spots(df, min_cluster, max_cluster):
-    start_points = list()
-    end_points = list()
-    length = len(df)
-
-
-    for i in range(length):
-        start_points.append([df['start_lat'].iloc[i], df['start_lon'].iloc[i]])
-        end_points.append([df['end_lat'].iloc[i], df['end_lon'].iloc[i]])
-
-    points = np.radians(np.vstack([start_points, end_points]))
-
-    max_cluster = min(max_cluster, len(points))
-    sil_scores = list()
-    for i in range(min_cluster, max_cluster):
-        ac = AgglomerativeClustering(n_clusters=i)
-        pred = ac.fit_predict(points)
-        sil_score = silhouette_score(points, pred)
-        sil_scores.append(sil_score)
-
-    n_cluster = np.argmax(sil_scores) + min_cluster
-    ac = AgglomerativeClustering(n_clusters=n_cluster)
-    clusters = ac.fit_predict(points)
-
-    start_clusters = list()
-    end_clusters = list()
-
     for i, cluster in enumerate(clusters):
         if i < length:
             start_clusters.append(clusters[i])

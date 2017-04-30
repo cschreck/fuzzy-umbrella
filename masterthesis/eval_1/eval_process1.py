@@ -16,6 +16,30 @@ import pandas as pd
 import numpy as np
 import operator
 
+def prepare(path, verbose=1):
+    print(path)
+    trajs = read_geolife(path)
+    preprocessed = list()
+    for traj in trajs:
+        traj_new = time_duplication_filter(traj)
+        traj_new = speed_filter_abs(traj_new, 300, in_kmh=True)
+        preprocessed.append(traj_new)
+
+    if verbose > 1:
+        print('Trajectories preprocessed')
+
+    df = make_df(preprocessed)
+
+    if verbose > 1:
+        print('Trajectories split at staypoints')
+
+    df = kmeans_cluster_into_spots(df, 20, 100)
+
+    if verbose > 1:
+        print('Trajectories clustered in sps')
+
+
+
 
 def run(path, verbose=1):
     print(path)

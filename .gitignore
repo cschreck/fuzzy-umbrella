@@ -13,3 +13,6 @@ masterthesis/config.py
 
 #notebook checkpoints
 notebooks/.ipynb_checkpoints/*.ipynb
+
+#the routes
+resources/

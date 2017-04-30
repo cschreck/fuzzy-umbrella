@@ -1,6 +1,8 @@
 from sklearn.base import BaseEstimator
 from sklearn.base import TransformerMixin
 from sklearn.cluster import DBSCAN
+from datetime import timedelta
+import pandas as pd
 
 from gpxpy import geo
 
@@ -63,7 +65,7 @@ class FuzzySpotTransformer(BaseEstimator, TransformerMixin):
 
 
 class DenseDepartureTimes(BaseEstimator, TransformerMixin):
-    def __init__(self, eps=0.5, look_ahead=timedelta(hours=1)):
+    def __init__(self, eps=15, look_ahead=timedelta(hours=1)):
         self.eps = eps
         self.look_ahead = look_ahead
 
@@ -71,22 +73,33 @@ class DenseDepartureTimes(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        rows = list()
+        one_second = timedelta(seconds=1)
+        look_ahead_data = list()
+        idx_insert = list()
+        X.reset_index(drop=True, inplace=True)
 
         if self.look_ahead:
             for i in range(len(X)):
                 for j in range(i + 1, len(X)):
-                    if X['start_date'].iloc[j] - X['start_date'].iloc[i] < self.look_ahead:
-                        row_cp = X.iloc[i].copy()
-                        row_cp['end_lat'] = X['end_lat'].iloc[j]
-                        row_cp['end_lon'] = X['end_lon'].iloc[j]
-                        row_cp['end_date'] = X['end_date'].iloc[j]
-                        row_cp['end_cluster'] = X['end_cluster'].iloc[j]
-                        row_cp['start_date'] = X['start_date'].iloc[i] + timedelta(seconds=1)
-                        rows.append(row_cp)
+                    if X.iloc[j]['start_date'] - X.iloc[i]['end_date'] < self.look_ahead:
+                        look_ahead_data.append([X.iloc[i]['start_lat'],
+                                                X.iloc[i]['start_lon'],
+                                                X.iloc[i]['start_date'] + one_second,
+                                                X.iloc[j]['end_lat'],
+                                                X.iloc[j]['end_lon'],
+                                                X.iloc[j]['end_date'],
+                                                X.iloc[i]['start_cluster'],
+                                                X.iloc[j]['end_cluster'],
+                                                ])
 
-            X = X.append(rows, ignore_index=True)
-            X = X.set_index(pd.DatetimeIndex(X['start_date'])).sort_index()
+                    else:
+                        break
+
+        if len(look_ahead_data) > 0:
+            X = pd.concat([X, pd.DataFrame(look_ahead_data, columns=X.columns.values)], ignore_index=True)
+
+        X = pd.DataFrame(data=X, columns=X.columns.values)
+        X = X.set_index(pd.DatetimeIndex(X['start_date'])).sort_index()
 
         dbscan = DBSCAN(eps=self.eps, min_samples=1, metric='precomputed')
         start_cluster_to_time = dict()
@@ -99,17 +112,19 @@ class DenseDepartureTimes(BaseEstimator, TransformerMixin):
         start_time_cluster = list()
         for index, row in X.iterrows():
             cluster_pair = (row['start_cluster'], row['end_cluster'])
-            start_time_cluster.append("{}_{}".format(cluster_pair, start_cluster_to_time[cluster_pair][index]))
+            start_time_cluster.append("{}___{}".format(cluster_pair, start_cluster_to_time[cluster_pair][index]))
 
         X['start_time_cluster'] = start_time_cluster
         return X
 
-    def _time_to_degree(self, time):
-        return ((time.hour + (time.minute + (time.second / 60)) / 60) / 24) * 360
+    def _time_to_minutes(self, time):
+        return time.hour * 60 + time.minute + time.second / 60
 
     def _time_distance(self, t1, t2):
-        circumference = 2 * np.pi
-        return (np.abs(self._time_to_degree(t1) - self._time_to_degree(t2))) * (circumference / 360)
+        diff = np.abs(self._time_to_minutes(t1) - self._time_to_minutes(t2))
+        if diff > 720:
+            diff = 1440 - diff
+        return diff
 
     def _calc_pdist_matrix(self, group):
         matrix = list()

@@ -6,6 +6,7 @@ import numpy as np
 
 from .util import calc_heading
 
+from tpm.data_model import Point, Trajectory
 from os.path import splitext
 from os.path import basename
 from gpxdata import Document
@@ -83,8 +84,10 @@ def create_route_json_from_file(
     )
 
 
-def create_gps_points(points, speed, sampling_rate, wrong_order):
+def create_gps_points(points, speed, sampling_rate, wrong_order, starttime):
     new_points = []
+    tdsr = datetime.timedelta(seconds=sampling_rate)
+    timecounter = starttime
 
     for p1, p2 in zip(points[:-1], points[1:]):
         if not wrong_order:
@@ -103,10 +106,10 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
         distance = geo.distance(p1_lat, p1_lon, None, p2_lat, p2_lon, None)
 
         numb_of_points = int(distance / (speed * sampling_rate))
-
-        new_points.append((p1_lat, p1_lon))
+        new_points.append(Point(p1_lat, p1_lon, timecounter))
 
         if numb_of_points == 0:
+            timecounter = timecounter + tdsr
             continue
 
         if p1_lat > p2_lat:
@@ -121,7 +124,8 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
                     part_lon = (diff_lon / numb_of_points) * i
                     new_lon = p1_lon - part_lon
 
-                    new_points.append((new_lat, new_lon))
+                    new_points.append(Point(new_lat, new_lon, timecounter))
+                    timecounter = timecounter + tdsr
             else:
                 diff_lat = abs(p1_lat - p2_lat)
                 diff_lon = abs(p2_lon - p1_lon)
@@ -133,7 +137,8 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
                     part_lon = (diff_lon / numb_of_points) * i
                     new_lon = p1_lon + part_lon
 
-                    new_points.append((new_lat, new_lon))
+                    new_points.append(Point(new_lat, new_lon, timecounter))
+                    timecounter = timecounter + tdsr
 
         else:
             if p1_lon > p2_lon:
@@ -147,7 +152,8 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
                     part_lon = (diff_lon / numb_of_points) * i
                     new_lon = p1_lon - part_lon
 
-                    new_points.append((new_lat, new_lon))
+                    new_points.append(Point(new_lat, new_lon, timecounter))
+                    timecounter = timecounter + tdsr
 
             else:
                 diff_lat = abs(p2_lat - p1_lat)
@@ -160,7 +166,10 @@ def create_gps_points(points, speed, sampling_rate, wrong_order):
                     part_lon = (diff_lon / numb_of_points) * i
                     new_lon = p1_lon + part_lon
 
-                    new_points.append((new_lat, new_lon))
+                    new_points.append(Point(new_lat, new_lon, timecounter))
+                    timecounter = timecounter + tdsr
+
+        timecounter = timecounter + tdsr
 
     return new_points
 
@@ -233,4 +242,22 @@ def read_gpxs(directory):
             gpx_files[splitext(basename(gpx_filepath))[0]] = gpx_file
 
     return gpx_files
+
+
+def create_bicycle_traj(file, uiddummy, starttime, riddummy):
+    raw_points = file.get_points_data()
+    traj = Trajectory(create_gps_points(raw_points, BICYCLE_SPEED, SAMPLING_RATE, True, starttime))
+    return traj
+
+
+def create_car_traj(file, uiddummy, starttime, riddummy):
+    raw_points = file.get_points_data()
+    traj = Trajectory(create_gps_points(raw_points, CAR_SPEED, SAMPLING_RATE, True, starttime))
+    return traj
+
+
+def create_walking_traj(file, uiddummy, starttime, riddummy):
+    raw_points = file.get_points_data()
+    traj = Trajectory(create_gps_points(raw_points, WALKING_SPEED, SAMPLING_RATE, True, starttime))
+    return traj
 
