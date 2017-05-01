@@ -1,8 +1,8 @@
-#Installation
+# Installation
 
 
 
-1. Install Conda [https://conda.io/docs/install/quick.html]
+1. Install Conda https://conda.io/docs/install/quick.html
 2. cd to root of project
 2. ```conda env create -f environment.yml```
 3. ```source activate mt```
